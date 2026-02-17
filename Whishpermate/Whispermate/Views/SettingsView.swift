@@ -93,6 +93,7 @@ struct SettingsView: View {
     @ObservedObject var authManager = AuthManager.shared
     @ObservedObject var screenCaptureManager = ScreenCaptureManager.shared
     @ObservedObject var parakeetService = ParakeetTranscriptionService.shared
+    @ObservedObject var updateManager = UpdateManager.shared
     @Binding var selectedSection: SettingsSection
     @State private var transcriptionApiKey = ""
     @State private var llmApiKey = ""
@@ -723,6 +724,41 @@ struct SettingsView: View {
                         .labelsHidden()
                     }
                     .padding(.vertical, 2)
+                }
+            }
+
+            SettingsCard {
+                VStack(spacing: 0) {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("App Updates")
+                                .dsFont(.body)
+                                .foregroundStyle(Color.dsForeground)
+                            Text("Current version \(updateManager.versionDisplay)")
+                                .dsFont(.label)
+                                .foregroundStyle(Color.dsMutedForeground)
+                        }
+                        Spacer()
+                        Button("Check for Updates...") {
+                            updateManager.checkForUpdates()
+                        }
+                        .controlSize(.small)
+                    }
+                    .padding(.vertical, 2)
+
+                    if !updateManager.isInAppUpdatesEnabled {
+                        Divider()
+                            .padding(.vertical, 6)
+
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "info.circle")
+                                .foregroundStyle(Color.dsMutedForeground)
+                            Text("Sparkle appcast is not configured yet. The update button opens the latest release page.")
+                                .dsFont(.label)
+                                .foregroundStyle(Color.dsMutedForeground)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
             }
         }

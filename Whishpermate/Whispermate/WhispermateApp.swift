@@ -26,6 +26,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationDidFinishLaunching(_: Notification) {
         statusBarManager.setupMenuBar()
+        _ = UpdateManager.shared
 
         // Disable automatic window restoration for all windows except main
         AppDefaults.shared.set(false, forKey: "NSQuitAlwaysKeepsWindows")
@@ -421,6 +422,11 @@ struct WhishpermateApp: App {
         .commands {
             // Remove File > New Window command since we only want one main window
             CommandGroup(replacing: .newItem) {}
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates...") {
+                    UpdateManager.shared.checkForUpdates()
+                }
+            }
         }
 
         // History window - opens from Settings

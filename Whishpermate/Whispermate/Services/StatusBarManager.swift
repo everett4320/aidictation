@@ -112,6 +112,14 @@ class StatusBarManager {
         settingsItem.target = self
         menu?.addItem(settingsItem)
 
+        let updatesItem = NSMenuItem(
+            title: "Check for Updates...",
+            action: #selector(checkForUpdates),
+            keyEquivalent: ""
+        )
+        updatesItem.target = self
+        menu?.addItem(updatesItem)
+
         menu?.addItem(NSMenuItem.separator())
 
         // Onboarding
@@ -163,6 +171,10 @@ class StatusBarManager {
 
     @objc private func showSettings() {
         showMainSettingsWindow()
+    }
+
+    @objc private func checkForUpdates() {
+        UpdateManager.shared.checkForUpdates()
     }
 
     @objc private func showOnboarding() {

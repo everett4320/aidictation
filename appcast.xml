@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"
+     xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <channel>
+        <title>AIDictation Updates</title>
+        <link>https://github.com/writingmate/aidictation/releases</link>
+        <description>Latest AIDictation releases.</description>
+        <language>en</language>
+        <item>
+            <title>AIDictation 0.0.48</title>
+            <pubDate>Tue, 17 Feb 2026 00:00:00 +0000</pubDate>
+            <link>https://github.com/writingmate/aidictation/releases/tag/v0.0.48</link>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/writingmate/aidictation/releases/download/v0.0.48/AIDictation-v0.0.48.dmg"
+                sparkle:version="3"
+                sparkle:shortVersionString="0.0.48"
+                length="8042729"
+                type="application/octet-stream" />
+        </item>
+    </channel>
+</rss>
