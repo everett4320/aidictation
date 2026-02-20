@@ -1,0 +1,206 @@
+name: Release macOS
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version info
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          BUILD="${TAG##*.}"
+          echo "version=$TAG" >> $GITHUB_OUTPUT
+          echo "build=$BUILD" >> $GITHUB_OUTPUT
+          echo "tag=v$TAG" >> $GITHUB_OUTPUT
+
+      - name: Bump version in project
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BUILD="${{ steps.version.outputs.build }}"
+          awk -v v="$VERSION" -v b="$BUILD" '
+            /MARKETING_VERSION/     { sub(/= [^;]+/, "= " v) }
+            /CURRENT_PROJECT_VERSION/ { sub(/= [^;]+/, "= " b) }
+            { print }
+          ' Whishpermate/Whispermate.xcodeproj/project.pbxproj \
+            > /tmp/project.pbxproj.tmp
+          mv /tmp/project.pbxproj.tmp Whishpermate/Whispermate.xcodeproj/project.pbxproj
+
+      - name: Cache SPM packages
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Developer/Xcode/DerivedData/Whispermate-*/SourcePackages
+          key: ${{ runner.os }}-spm-${{ hashFiles('Whishpermate/Whispermate.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Import Developer ID certificate
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+        run: |
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          echo "$CERTIFICATE_BASE64" | base64 --decode > /tmp/certificate.p12
+          security import /tmp/certificate.p12 \
+            -k build.keychain \
+            -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/productbuild
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm /tmp/certificate.p12
+
+      - name: Resolve Swift package dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project Whishpermate/Whispermate.xcodeproj \
+            -scheme Whispermate
+
+      - name: Build archive
+        run: |
+          xcodebuild \
+            -project Whishpermate/Whispermate.xcodeproj \
+            -scheme Whispermate \
+            -configuration Release \
+            -archivePath /tmp/AIDictation.xcarchive \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM=G7DJ6P37KU \
+            archive
+
+      - name: Export with Developer ID signing
+        run: |
+          cat > /tmp/export-options.plist << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>developer-id</string>
+              <key>signingStyle</key>
+              <string>automatic</string>
+              <key>hardened runtime</key>
+              <true/>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath /tmp/AIDictation.xcarchive \
+            -exportOptionsPlist /tmp/export-options.plist \
+            -exportPath /tmp/AIDictation-export
+
+      - name: Notarize app
+        env:
+          NOTARIZE_APPLE_ID: ${{ secrets.NOTARIZE_APPLE_ID }}
+          NOTARIZE_PASSWORD: ${{ secrets.NOTARIZE_PASSWORD }}
+          NOTARIZE_TEAM_ID: ${{ secrets.NOTARIZE_TEAM_ID }}
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            /tmp/AIDictation-export/AIDictation.app \
+            /tmp/AIDictation-notarize.zip
+          xcrun notarytool submit /tmp/AIDictation-notarize.zip \
+            --apple-id "$NOTARIZE_APPLE_ID" \
+            --password "$NOTARIZE_PASSWORD" \
+            --team-id "$NOTARIZE_TEAM_ID" \
+            --wait
+          xcrun stapler staple /tmp/AIDictation-export/AIDictation.app
+          rm /tmp/AIDictation-notarize.zip
+
+      - name: Create DMG
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          hdiutil create \
+            -volname "AIDictation" \
+            -srcfolder /tmp/AIDictation-export/AIDictation.app \
+            -ov -format UDZO \
+            /tmp/AIDictation-v${VERSION}.dmg
+
+      - name: Notarize and staple DMG
+        env:
+          NOTARIZE_APPLE_ID: ${{ secrets.NOTARIZE_APPLE_ID }}
+          NOTARIZE_PASSWORD: ${{ secrets.NOTARIZE_PASSWORD }}
+          NOTARIZE_TEAM_ID: ${{ secrets.NOTARIZE_TEAM_ID }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          xcrun notarytool submit /tmp/AIDictation-v${VERSION}.dmg \
+            --apple-id "$NOTARIZE_APPLE_ID" \
+            --password "$NOTARIZE_PASSWORD" \
+            --team-id "$NOTARIZE_TEAM_ID" \
+            --wait
+          xcrun stapler staple /tmp/AIDictation-v${VERSION}.dmg
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          gh release create "v${VERSION}" \
+            /tmp/AIDictation-v${VERSION}.dmg \
+            --title "AIDictation v${VERSION}" \
+            --generate-notes \
+            --repo "${{ github.repository }}"
+
+      - name: Update appcast
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BUILD="${{ steps.version.outputs.build }}"
+          SIZE=$(stat -f%z /tmp/AIDictation-v${VERSION}.dmg)
+          DATE=$(date -u "+%a, %d %b %Y %H:%M:%S +0000")
+          REPO="writingmate/aidictation"
+
+          python3 - "$VERSION" "$BUILD" "$SIZE" "$DATE" "$REPO" << 'PYEOF'
+          import sys, re
+
+          version, build, size, date, repo = sys.argv[1:]
+
+          new_item = f"""        <item>
+              <title>AIDictation {version}</title>
+              <pubDate>{date}</pubDate>
+              <link>https://github.com/{repo}/releases/tag/v{version}</link>
+              <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+              <enclosure
+                  url="https://github.com/{repo}/releases/download/v{version}/AIDictation-v{version}.dmg"
+                  sparkle:version="{build}"
+                  sparkle:shortVersionString="{version}"
+                  length="{size}"
+                  type="application/octet-stream" />
+          </item>"""
+
+          with open("appcast.xml") as f:
+              content = f.read()
+
+          # Insert as the first <item> in the feed
+          content = content.replace("        <item>", new_item + "\n        <item>", 1)
+
+          with open("appcast.xml", "w") as f:
+              f.write(content)
+
+          print(f"appcast updated for v{version} (build {build}, {size} bytes)")
+          PYEOF
+
+      - name: Commit appcast and version bump to main
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add appcast.xml Whishpermate/Whispermate.xcodeproj/project.pbxproj
+          git commit -m "update appcast for v${VERSION} release"
+          git push origin HEAD:main
