@@ -56,6 +56,7 @@ class HotkeyManager: ObservableObject {
     private var eventTap: CFMachPort?
     private var eventTapRunLoopSource: CFRunLoopSource?
     private var flagsMonitor: Any?
+    private var wakeObserver: NSObjectProtocol?
 
     // Double-tap detection
     private var lastTapTime: Date?
@@ -75,6 +76,24 @@ class HotkeyManager: ObservableObject {
         loadHotkey()
         loadCommandHotkey()
         DebugLog.info("HotkeyManager init complete - dictation=\(currentHotkey?.displayString ?? "none"), command=\(commandHotkey?.displayString ?? "none")", context: "HotkeyManager LOG")
+
+        // Re-register hotkeys after system wake from sleep/hibernation.
+        // macOS can invalidate CGEvent taps during hibernation, so we need to
+        // tear down and recreate them on wake.
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.screensDidWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            DebugLog.info("System woke from sleep - re-registering hotkeys", context: "HotkeyManager LOG")
+            if !self.deferRegistration, self.currentHotkey != nil || self.commandHotkey != nil {
+                // Small delay to let the system stabilize after wake
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                    self?.registerHotkey()
+                }
+            }
+        }
     }
 
     // MARK: - Public API
@@ -880,6 +899,9 @@ class HotkeyManager: ObservableObject {
 
     deinit {
         unregisterHotkey()
+        if let wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+        }
     }
 }
 

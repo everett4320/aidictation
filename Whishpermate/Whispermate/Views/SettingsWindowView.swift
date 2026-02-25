@@ -34,19 +34,6 @@ struct SettingsWindowView: View {
             onboardingManager.resetOnboarding()
             WindowBridge.openWindow?("onboarding")
         }
-        .onReceive(NotificationCenter.default.publisher(for: .onboardingComplete)) { _ in
-            // Close onboarding window
-            if let window = NSApplication.shared.windows.first(where: { $0.identifier == WindowIdentifiers.onboarding }) {
-                window.close()
-            }
-
-            // Show and center main window
-            if let mainWindow = NSApplication.shared.windows.first(where: { $0.identifier == WindowIdentifiers.main }) {
-                mainWindow.center()
-                mainWindow.setIsVisible(true)
-                mainWindow.makeKeyAndOrderFront(nil)
-            }
-        }
         .onReceive(NotificationCenter.default.publisher(for: .openAccountSettings)) { _ in
             // Navigate to Account section and show window
             selectedSection = .account

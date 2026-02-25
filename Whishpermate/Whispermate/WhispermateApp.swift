@@ -35,6 +35,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // This ensures they persist throughout the app lifecycle
         setupHotkeyCallbacks()
 
+        // Listen for onboarding completion to close the onboarding window and show main.
+        // This must be in AppDelegate because the main window's SwiftUI view may not be
+        // active yet (the window is hidden at launch), so .onReceive won't fire there.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleOnboardingComplete),
+            name: .onboardingComplete,
+            object: nil
+        )
+
         // Check if onboarding is needed and open window if necessary
         checkAndShowOnboarding()
 
@@ -229,6 +239,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     // MARK: - Onboarding
+
+    @objc private func handleOnboardingComplete() {
+        DebugLog.info("Handling onboarding complete notification", context: "AppDelegate")
+
+        // Close onboarding window
+        if let window = NSApplication.shared.windows.first(where: { $0.identifier == WindowIdentifiers.onboarding }) {
+            window.close()
+        }
+
+        // Show and center main window
+        if let mainWindow = NSApplication.shared.windows.first(where: { $0.identifier == WindowIdentifiers.main }) {
+            mainWindow.center()
+            mainWindow.setIsVisible(true)
+            mainWindow.makeKeyAndOrderFront(nil)
+        }
+    }
 
     private func checkAndShowOnboarding() {
         // Delay slightly to ensure views are loaded
