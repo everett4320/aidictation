@@ -150,6 +150,11 @@ class StatusBarManager {
     // MARK: - Private Methods
 
     @objc private func toggleWindow() {
+        // Don't show settings while onboarding is active
+        if OnboardingManager.shared.showOnboarding {
+            return
+        }
+
         // Use stored window reference if available, otherwise find by identifier
         let window = appWindow ?? findMainWindow()
 

@@ -55,7 +55,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        // Don't show settings window during recording/transcription/pasting
+        // Don't show settings window during onboarding or recording/transcription/pasting
+        if onboardingManager.showOnboarding {
+            return false
+        }
         let state = AppState.shared
         if state.recordingState != .idle || state.isProcessing {
             return false
@@ -69,7 +72,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if mainWindow == nil {
             configureMainWindow()
         }
-        // Don't let macOS auto-restore the settings window during recording/transcription
+        // Don't let macOS auto-restore the settings window during onboarding or recording/transcription
+        if onboardingManager.showOnboarding {
+            mainWindow?.orderOut(nil)
+            return
+        }
         let state = AppState.shared
         if state.recordingState != .idle || state.isProcessing {
             mainWindow?.orderOut(nil)
@@ -345,6 +352,11 @@ extension View {
 
 /// Global function to show main window - can be called from anywhere
 func showMainSettingsWindow(retryCount: Int = 0) {
+    // Don't show settings while onboarding is active
+    if OnboardingManager.shared.showOnboarding {
+        return
+    }
+
     NSApplication.shared.activate(ignoringOtherApps: true)
 
     // Find the main window and show it

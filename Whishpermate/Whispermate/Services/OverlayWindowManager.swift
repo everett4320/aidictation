@@ -292,6 +292,10 @@ class OverlayWindowManager: ObservableObject {
     }
 
     func expandToFullMode() {
+        // Don't show settings while onboarding is active
+        if OnboardingManager.shared.showOnboarding {
+            return
+        }
         DebugLog.info("expandToFullMode() - bringing app to foreground", context: "OverlayWindowManager")
         NSApp.activate(ignoringOtherApps: true)
         if let window = findMainWindow() {
