@@ -48,7 +48,7 @@ public enum TranscriptionProvider: String, CaseIterable, Identifiable {
 }
 
 public class TranscriptionProviderManager: ObservableObject {
-    @Published var selectedProvider: TranscriptionProvider = .custom
+    @Published var selectedProvider: TranscriptionProvider = .groq
     @Published var customEndpoint: String = ""
     @Published var customModel: String = ""
 
@@ -64,10 +64,18 @@ public class TranscriptionProviderManager: ObservableObject {
         if let savedProvider = AppDefaults.shared.string(forKey: providerKey),
            let provider = TranscriptionProvider(rawValue: savedProvider)
         {
-            selectedProvider = provider
+            // Force Groq even if a previous custom provider was saved (prevents proxy endpoints)
+            if provider != .groq {
+                selectedProvider = .groq
+                UserDefaults.standard.set(selectedProvider.rawValue, forKey: providerKey)
+                UserDefaults.standard.removeObject(forKey: endpointKey)
+                UserDefaults.standard.removeObject(forKey: modelKey)
+            } else {
+                selectedProvider = provider
+            }
         } else {
-            // Default to custom provider if no saved preference
-            selectedProvider = .custom
+            // Default to Groq if no saved preference
+            selectedProvider = .groq
         }
         customEndpoint = AppDefaults.shared.string(forKey: endpointKey) ?? ""
         customModel = AppDefaults.shared.string(forKey: modelKey) ?? ""

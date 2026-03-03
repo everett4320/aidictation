@@ -6,6 +6,7 @@ import WhisperMateShared
 
 /// Central application state - single source of truth for app state
 /// Recording works completely independently of view lifecycle
+@MainActor
 class AppState: ObservableObject {
     static let shared = AppState()
 
@@ -302,8 +303,10 @@ class AppState: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.appContext = .background
-            DebugLog.info("App went to background", context: "AppState")
+            Task { @MainActor in
+                self?.appContext = .background
+                DebugLog.info("App went to background", context: "AppState")
+            }
         }
 
         NotificationCenter.default.addObserver(
@@ -311,8 +314,10 @@ class AppState: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.appContext = .foreground
-            DebugLog.info("App came to foreground", context: "AppState")
+            Task { @MainActor in
+                self?.appContext = .foreground
+                DebugLog.info("App came to foreground", context: "AppState")
+            }
         }
     }
 
@@ -391,7 +396,7 @@ class AppState: ObservableObject {
                 }
 
                 let transcriptionStart = CFAbsoluteTimeGetCurrent()
-                let result = try await performTranscription(
+                let rawResult = try await performTranscription(
                     audioURL: audioURL,
                     appContext: capturedAppContext,
                     clipboardContent: clipboardContent,
@@ -399,6 +404,9 @@ class AppState: ObservableObject {
                 )
                 let transcriptionMs = Int((CFAbsoluteTimeGetCurrent() - transcriptionStart) * 1000)
                 DebugLog.info("⏱️ Transcription took \(transcriptionMs)ms", context: "AppState")
+
+                // Normalize punctuation for Chinese output if applicable
+                let result = normalizePunctuationIfNeeded(rawResult)
 
                 // Success - save to history
                 let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
@@ -670,7 +678,6 @@ class AppState: ObservableObject {
 
         return nil
     }
-
     // MARK: - Dictation Result Processing
 
     /// Process dictation result: update state and paste transcribed text
@@ -788,5 +795,26 @@ class AppState: ObservableObject {
             self.overlayManager.transition(to: .hidden)
             CommandModeManager.shared.reset()
         }
+    }
+
+    /// Replace half-width English punctuation with full-width Chinese punctuation only when the text actually contains Chinese characters.
+    private func normalizePunctuationIfNeeded(_ text: String) -> String {
+        let containsChinese = text.range(of: "\\p{Han}", options: .regularExpression) != nil
+        guard containsChinese else { return text }
+
+        var normalized = text
+        let replacements: [(String, String)] = [
+            (",", "，"),
+            (".", "。"),
+            ("?", "？"),
+            ("!", "！"),
+            (":", "："),
+            (";", "；")
+        ]
+
+        for (ascii, fullWidth) in replacements {
+            normalized = normalized.replacingOccurrences(of: ascii, with: fullWidth)
+        }
+        return normalized
     }
 }

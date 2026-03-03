@@ -9,6 +9,7 @@ import CoreText
 import SwiftUI
 import WhisperMateShared
 
+@MainActor
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var statusBarManager = StatusBarManager()
     var mainWindow: NSWindow?
@@ -290,17 +291,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Dictation hotkey callbacks
         hotkeyManager.onHotkeyPressed = { [weak self] in
             DebugLog.info("🎯 Dictation hotkey pressed", context: "AppDelegate")
-            self?.appState.startRecording()
+            Task { @MainActor in
+                self?.appState.startRecording()
+            }
         }
 
         hotkeyManager.onHotkeyReleased = { [weak self] in
             DebugLog.info("🎯 Dictation hotkey released", context: "AppDelegate")
-            self?.appState.stopRecording()
+            Task { @MainActor in
+                self?.appState.stopRecording()
+            }
         }
 
         hotkeyManager.onDoubleTap = { [weak self] in
             DebugLog.info("🎯🎯 Double-tap", context: "AppDelegate")
-            self?.appState.toggleContinuousRecording()
+            Task { @MainActor in
+                self?.appState.toggleContinuousRecording()
+            }
         }
 
         // Command hotkey callbacks

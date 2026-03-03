@@ -93,7 +93,7 @@ enum PostProcessingProvider: String, CaseIterable, Identifiable {
 }
 
 class TranscriptionProviderManager: ObservableObject {
-    @Published var selectedProvider: TranscriptionProvider = .custom
+    @Published var selectedProvider: TranscriptionProvider = .groq
     @Published var customEndpoint: String = ""
     @Published var customModel: String = ""
     @Published var enableLLMPostProcessing: Bool = false
@@ -116,9 +116,18 @@ class TranscriptionProviderManager: ObservableObject {
         if let saved = AppDefaults.shared.string(forKey: Keys.selectedProvider),
            let provider = TranscriptionProvider(rawValue: saved)
         {
-            selectedProvider = provider
+            // Force Groq even if a previous custom provider was saved (prevents proxy endpoints)
+            if provider != .groq {
+                selectedProvider = .groq
+                UserDefaults.standard.set(selectedProvider.rawValue, forKey: providerKey)
+                // Clear any lingering custom endpoints/models
+                UserDefaults.standard.removeObject(forKey: endpointKey)
+                UserDefaults.standard.removeObject(forKey: modelKey)
+            } else {
+                selectedProvider = provider
+            }
         } else {
-            selectedProvider = .custom
+            selectedProvider = .groq
         }
         enableLLMPostProcessing = false
         postProcessingProvider = .aidictation
